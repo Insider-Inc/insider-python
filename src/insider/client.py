@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import atexit
 import os
+import subprocess
 import threading
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
@@ -95,6 +96,18 @@ class Client:
             queue_size=transport_queue_size,
             flush_timeout=transport_flush_timeout,
         )
+        self.commit_hash: Optional[str] = self._get_commit_hash()
+
+    def _get_commit_hash(self) -> Optional[str]:
+        try:
+            output = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], 
+                stderr=subprocess.DEVNULL,
+                text=True
+            ).strip()
+            return output if output else None
+        except Exception:
+            return None
 
     # ------------------------------------------------------------------
     # Capture
@@ -133,6 +146,7 @@ class Client:
             environment=self.scope.static.environment,
             release=self.scope.static.release,
             trace_id=trace_id,
+            commit_hash=self.commit_hash,
             payload=payload,
             tags=tags,
             extra=extra,
@@ -169,6 +183,7 @@ class Client:
             environment=self.scope.static.environment,
             release=self.scope.static.release,
             trace_id=trace_id,
+            commit_hash=self.commit_hash,
             payload=payload,
             tags=tags,
             extra=extra,

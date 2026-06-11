@@ -56,6 +56,7 @@ def build_envelope(
     tags: Optional[Dict[str, Any]] = None,
     extra: Optional[Dict[str, Any]] = None,
     occurred_at: Optional[str] = None,
+    commit_hash: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Assemble the Beacon envelope. Pure: no I/O, no globals."""
     body: Dict[str, Any] = dict(payload or {})
@@ -63,6 +64,8 @@ def build_envelope(
         body["tags"] = tags
     if extra:
         body["extra"] = extra
+    if commit_hash:
+        body["commit_hash"] = commit_hash
     return {
         "kind": kind,
         "level": level,
