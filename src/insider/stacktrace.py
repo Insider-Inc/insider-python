@@ -62,18 +62,28 @@ def extract_frames(
     """
     frames: List[Dict[str, Any]] = []
     walked = 0
+    cwd = os.getcwd()
     while tb is not None and walked < max_frames:
         try:
             frame = tb.tb_frame
             code = frame.f_code
             filename = code.co_filename
+
+            frame_in_app = is_in_app(filename, in_app_include)
+
+            if filename and filename.startswith(cwd):
+                try:
+                    filename = os.path.relpath(filename, cwd)
+                except ValueError:
+                    pass
+
             frames.append(
                 {
                     "filename": filename,
                     "function": code.co_name,
                     "module": frame.f_globals.get("__name__", ""),
                     "lineno": tb.tb_lineno,
-                    "in_app": is_in_app(filename, in_app_include),
+                    "in_app": frame_in_app,
                 }
             )
         except Exception as exc:

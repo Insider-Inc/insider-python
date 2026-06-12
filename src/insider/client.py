@@ -98,12 +98,17 @@ class Client:
         )
         self.commit_hash: Optional[str] = self._get_commit_hash()
 
+        # Zero-config release tracking: if no release is provided, fallback to the git commit hash
+        if not release and self.commit_hash:
+            release = self.commit_hash
+            self.scope.static.release = release
+
     def _get_commit_hash(self) -> Optional[str]:
         try:
             output = subprocess.check_output(
-                ["git", "rev-parse", "HEAD"], 
+                ["git", "rev-parse", "HEAD"],
                 stderr=subprocess.DEVNULL,
-                text=True
+                text=True,
             ).strip()
             return output if output else None
         except Exception:
