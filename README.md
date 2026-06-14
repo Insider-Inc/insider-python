@@ -41,26 +41,31 @@ insider.capture_message("cache miss spiked", level="warning")
 
 ### Django
 
-Add the integration to `INSTALLED_APPS` and configure via settings:
+Initialize in `wsgi.py` (or `asgi.py`) before `get_wsgi_application()`:
 
 ```python
-INSTALLED_APPS = [
-    # ...
-    "insider.contrib.django",
-]
+import os
+import insider
+from insider.integrations.django import DjangoIntegration
 
-MIDDLEWARE = [
-    # ...
-    "insider.contrib.django.middleware.InsiderMiddleware",
-]
+insider.init(
+    dsn=os.environ.get("INSIDER_DSN"),
+    environment="production",
+    release="1.2.3",
+    integrations=[DjangoIntegration()],
+)
 
-INSIDER_DSN = "https://<beacon_token>@insider.example.com/<project_uuid>"
-INSIDER_ENVIRONMENT = "production"
-INSIDER_RELEASE = "1.2.3"
+from django.core.wsgi import get_wsgi_application
+application = get_wsgi_application()
 ```
 
-That's the whole setup. Every unhandled exception in a view is now a
-Beacon in your dashboard.
+That's the whole setup. Every unhandled exception in a view — including
+Django REST Framework API views — is now a Beacon in your dashboard.
+No middleware, no `INSTALLED_APPS`, and no `EXCEPTION_HANDLER` wiring.
+
+**Legacy setup** (still supported): add `insider.contrib.django` to
+`INSTALLED_APPS` and `InsiderMiddleware` to `MIDDLEWARE`. Prefer the
+`wsgi.py` pattern for new projects.
 
 ## Configuration
 

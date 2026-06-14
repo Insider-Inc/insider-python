@@ -18,7 +18,7 @@ import atexit
 import os
 import subprocess
 import threading
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Union
 
 from ._envelope import build_envelope, enforce_size_budget
 from ._version import __version__
@@ -32,6 +32,16 @@ from .transport import BackgroundTransport
 
 VALID_KINDS = {"error", "perf", "log", "custom"}
 VALID_LEVELS = {"debug", "info", "warning", "error", "fatal"}
+
+IntegrationLike = Union[Any, type]
+
+
+def _setup_integrations(integrations: Sequence[IntegrationLike]) -> None:
+    for integration in integrations:
+        instance = integration() if isinstance(integration, type) else integration
+        setup_once = getattr(instance, "setup_once", None)
+        if callable(setup_once):
+            setup_once()
 
 
 # ---------------------------------------------------------------------------
@@ -259,6 +269,8 @@ def _set_active(client: Optional[Client]) -> None:
 @safe
 def init(
     dsn: Optional[str] = None,
+    *,
+    integrations: Optional[Sequence[IntegrationLike]] = None,
     **kwargs: Any,
 ) -> Optional[Client]:
     """
@@ -268,6 +280,9 @@ def init(
     Calling `init` a second time is allowed but logs a warning and
     closes the previous client first. The new client becomes the
     process-global one.
+
+    Pass framework integrations via `integrations=[...]`. Each integration's
+    `setup_once()` runs after the client is active.
     """
     global _active_client
     raw = _resolve_dsn_string(dsn)
@@ -280,6 +295,8 @@ def init(
         debug(f"invalid DSN: {exc}; entering disabled mode")
         return None
 
+    integration_list = list(integrations or [])
+
     with _init_lock:
         if _active_client is not None:
             debug("re-initializing; closing previous client")
@@ -290,6 +307,7 @@ def init(
         client = Client(parsed, **kwargs)
         _set_active(client)
 
+    _setup_integrations(integration_list)
     atexit.register(_atexit_close)
     return client
 

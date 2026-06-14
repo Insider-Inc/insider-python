@@ -13,6 +13,7 @@ from typing import Any, Dict
 from django.apps import AppConfig
 
 from ... import init
+from ...integrations.django import DjangoIntegration
 from ...safety import debug
 
 
@@ -57,4 +58,4 @@ class InsiderConfig(AppConfig):
         # env-var fallback in `init` still applies if Django's settings
         # didn't define it.
         dsn = kwargs.pop("dsn", None)
-        init(dsn, **kwargs)
+        init(dsn, integrations=[DjangoIntegration()], **kwargs)

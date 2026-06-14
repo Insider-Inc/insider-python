@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "insider-python"
-version = "0.1.0"
+version = "0.1.3"
 description = "Python SDK for Insider — ship Beacons to your Insider server."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.8"
 license = "MIT"
 authors = [{ name = "Insider" }]
 keywords = ["insider", "telemetry", "errors", "monitoring", "sdk"]
@@ -15,6 +15,7 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -31,6 +32,7 @@ dev = [
     "pytest>=8",
     "pytest-django>=4.8",
     "django>=4.2",
+    "djangorestframework>=3.14",
 ]
 
 [project.urls]
