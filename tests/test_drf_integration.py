@@ -1,5 +1,5 @@
 """
-DRF tests for DjangoIntegration — no middleware, no EXCEPTION_HANDLER wiring.
+DRF tests for DjangoIntegration — one footprint per HTTP cycle.
 """
 
 from __future__ import annotations
@@ -36,24 +36,28 @@ def test_drf_unhandled_exception_is_captured(client, fake_transport):
     response = client.get("/api/boom/", HTTP_USER_AGENT="pytest-drf")
     assert response.status_code == 500
     assert len(fake_transport.envelopes) == 1
-    env = fake_transport.envelopes[0]
-    assert env["kind"] == "error"
-    assert env["message"] == "drf intentional explosion"
-    request_ctx = env["payload"]["request"]
-    assert request_ctx["method"] == "GET"
-    assert request_ctx["path"] == "/api/boom/"
-    assert request_ctx["headers"]["user-agent"] == "pytest-drf"
+
+    fp = fake_transport.envelopes[0]
+    assert fp["status_code"] == 500
+    assert fp["stack_trace"]["value"] == "drf intentional explosion"
+    assert fp["request_method"] == "get"
+    assert fp["request_path"] == "/api/boom/"
+    assert fp["user_agent"] == "pytest-drf"
 
 
 @pytest.mark.django_db
-def test_drf_handled_api_exception_is_not_captured(client, fake_transport):
+def test_drf_handled_api_exception_emits_footprint(client, fake_transport):
     response = client.get("/api/bad-request/")
     assert response.status_code == 400
-    assert fake_transport.envelopes == []
+    assert len(fake_transport.envelopes) == 1
+    fp = fake_transport.envelopes[0]
+    assert fp["status_code"] == 400
+    assert fp.get("exception_name") is None
 
 
 @pytest.mark.django_db
-def test_drf_clean_request_does_not_capture(client, fake_transport):
+def test_drf_clean_request_emits_footprint(client, fake_transport):
     response = client.get("/api/ok/")
     assert response.status_code == 200
-    assert fake_transport.envelopes == []
+    assert len(fake_transport.envelopes) == 1
+    assert fake_transport.envelopes[0]["request_path"] == "/api/ok/"

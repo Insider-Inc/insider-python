@@ -10,11 +10,11 @@ def home(_request):
 
 
 def boom(_request):
-    """Raise an unhandled exception. The middleware captures it as a Beacon."""
+    """Raise an unhandled exception. The middleware captures it as a Footprint."""
     raise ValueError("intentional demo explosion")
 
 
 def notice(_request):
-    """Manual capture: send a Beacon without raising."""
+    """Manual capture: send a Footprint without raising."""
     insider.capture_message("demo notice from /notice/", level="warning")
     return HttpResponse("captured")

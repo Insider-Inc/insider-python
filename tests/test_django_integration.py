@@ -1,5 +1,5 @@
 """
-DjangoIntegration tests — Sentry-style hooks without middleware.
+Tests for DjangoIntegration — one footprint per HTTP cycle.
 """
 
 from __future__ import annotations
@@ -33,21 +33,39 @@ def test_integration_captures_view_exception(client, fake_transport):
     response = client.get("/boom/?foo=bar", HTTP_USER_AGENT="pytest-ua")
     assert response.status_code == 500
     assert len(fake_transport.envelopes) == 1
-    env = fake_transport.envelopes[0]
-    assert env["kind"] == "error"
-    assert env["message"] == "intentional explosion"
-    request_ctx = env["payload"]["request"]
-    assert request_ctx["method"] == "GET"
-    assert request_ctx["path"] == "/boom/"
-    assert request_ctx["query_string"] == "foo=bar"
-    assert request_ctx["headers"]["user-agent"] == "pytest-ua"
+
+    fp = fake_transport.envelopes[0]
+    assert fp["status_code"] == 500
+    assert fp["request_method"] == "get"
+    assert fp["request_path"] == "/boom/"
+    assert fp["request_id"] is not None
+    assert fp["exception_name"] is not None
+    assert fp["stack_trace"]["value"] == "intentional explosion"
 
 
 @pytest.mark.django_db
-def test_integration_clean_request_does_not_capture(client, fake_transport):
+def test_integration_clean_request_emits_one_footprint(client, fake_transport):
     response = client.get("/ok/")
     assert response.status_code == 200
-    assert fake_transport.envelopes == []
+    assert len(fake_transport.envelopes) == 1
+    fp = fake_transport.envelopes[0]
+    assert fp["status_code"] == 200
+    assert fp["response_time"] >= 0
+    assert fp["request_id"] is not None
+    assert fp.get("exception_name") is None
+
+
+@pytest.mark.django_db
+def test_integration_auto_capture_can_be_disabled(client, fake_transport):
+    from insider.integrations.django import handler as handler_module
+
+    handler_module._auto_perf = False
+    try:
+        response = client.get("/ok/")
+        assert response.status_code == 200
+        assert fake_transport.envelopes == []
+    finally:
+        handler_module._auto_perf = True
 
 
 @pytest.mark.django_db

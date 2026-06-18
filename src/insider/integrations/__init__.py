@@ -11,6 +11,10 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
+from .logging import LoggingIntegration
+
+__all__ = ["Integration", "LoggingIntegration"]
+
 
 @runtime_checkable
 class Integration(Protocol):

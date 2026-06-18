@@ -11,6 +11,7 @@ Hooks installed (each once per process):
   - `BaseHandler.get_response` → request context on the SDK scope
   - `WSGIHandler.__call__` → capture catastrophic escapes
   - `APIView.initial` (when DRF is present) → DRF request body access
+  - Auto `kind=request` beacon per HTTP request (optional, default on)
 """
 
 from __future__ import annotations
@@ -22,12 +23,21 @@ from . import drf, handler, signals, wsgi
 
 
 class DjangoIntegration:
-    """Patch Django's request/exception path for automatic error capture."""
+    """Patch Django's request/exception path — one request beacon per HTTP cycle."""
 
     identifier = "django"
 
     _lock = threading.Lock()
     _installed = False
+
+    def __init__(self, *, auto_perf: bool = True) -> None:
+        """
+        Args:
+            auto_perf: When True (default), emit one `kind=request` beacon
+                after every HTTP request. Disable for high-traffic apps until
+                server-side sampling lands.
+        """
+        self.auto_perf = auto_perf
 
     @safe
     def setup_once(self) -> None:
@@ -45,6 +55,6 @@ class DjangoIntegration:
             return
 
         signals.install()
-        handler.install()
+        handler.install(auto_perf=self.auto_perf)
         wsgi.install()
         drf.install()

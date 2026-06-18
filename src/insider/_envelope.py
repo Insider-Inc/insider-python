@@ -1,5 +1,5 @@
 """
-Beacon envelope construction + size-budget enforcement.
+Footprint envelope construction + size-budget enforcement.
 
 `build_envelope` is called from the capture functions in `client.py`. It
 takes the raw bits (kind, level, message, exception payload, scope,
@@ -58,7 +58,7 @@ def build_envelope(
     occurred_at: Optional[str] = None,
     commit_hash: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Assemble the Beacon envelope. Pure: no I/O, no globals."""
+    """Assemble the Footprint envelope. Pure: no I/O, no globals."""
     body: Dict[str, Any] = dict(payload or {})
     if tags:
         body["tags"] = tags

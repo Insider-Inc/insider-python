@@ -35,9 +35,10 @@ try:
     risky()
 except Exception as exc:
     insider.capture_exception(exc)
-
-insider.capture_message("cache miss spiked", level="warning")
 ```
+
+Out-of-band events (background jobs, explicit calls) use standalone beacons:
+`capture_exception`, `capture_log`, `capture_perf`.
 
 ### Django
 
@@ -47,57 +48,98 @@ Initialize in `wsgi.py` (or `asgi.py`) before `get_wsgi_application()`:
 import os
 import insider
 from insider.integrations.django import DjangoIntegration
+from insider.integrations.logging import LoggingIntegration
 
 insider.init(
     dsn=os.environ.get("INSIDER_DSN"),
     environment="production",
     release="1.2.3",
-    integrations=[DjangoIntegration()],
+    enable_logs=True,
+    integrations=[DjangoIntegration(), LoggingIntegration()],
 )
 
 from django.core.wsgi import get_wsgi_application
 application = get_wsgi_application()
 ```
 
-That's the whole setup. Every unhandled exception in a view — including
-Django REST Framework API views — is now a Beacon in your dashboard.
+That's the whole setup. **Every HTTP request** emits **one** `kind=request`
+beacon containing:
+
+- timing (duration, method, path, status)
+- request context (headers, path, query string)
+- stdlib logs during that request (when `enable_logs=True`)
+- unhandled exception + stack trace (when the request fails)
+
 No middleware, no `INSTALLED_APPS`, and no `EXCEPTION_HANDLER` wiring.
 
-**Legacy setup** (still supported): add `insider.contrib.django` to
-`INSTALLED_APPS` and `InsiderMiddleware` to `MIDDLEWARE`. Prefer the
-`wsgi.py` pattern for new projects.
+Disable auto capture on high-traffic apps until sampling lands:
+
+```python
+integrations=[DjangoIntegration(auto_perf=False)]
+```
+
+### Logging
+
+During an HTTP request, stdlib `logging` lines are **buffered into the
+request envelope** — not beamed as separate rows:
+
+```python
+import logging
+
+logger = logging.getLogger(__name__)
+logger.info("checkout completed")  # → payload.logs[] on the request beacon
+```
+
+Requires `enable_logs=True`, `LoggingIntegration()`, and a configured
+logger level (see your app's `LOGGING` settings).
+
+Outside an HTTP request, stdlib logs still beam as standalone `kind=log`
+beacons. For explicit structured events, use `capture_log()`:
+
+```python
+insider.capture_log(
+    "User checkout completed",
+    level="info",
+    source="checkout.service",
+    tags={"feature": "checkout"},
+)
+```
+
+Manual perf timings (Celery, custom spans):
+
+```python
+insider.capture_perf(
+    op="celery.tasks.send_email",
+    duration_ms=842,
+)
+```
+
+## Footprint kinds
+
+| Kind | When |
+|------|------|
+| `request` | One per HTTP request (DjangoIntegration) |
+| `error` | Manual `capture_exception()` outside request cycle |
+| `log` | Manual `capture_log()` or stdlib logs outside request cycle |
+| `perf` | Manual `capture_perf()` for non-HTTP timings |
 
 ## Configuration
 
-Order of precedence (first wins):
-
-1. Keyword args to `insider.init(...)`.
-2. `INSIDER_*` environment variables.
-3. Django settings (when the Django integration is active).
-4. Hard-coded defaults.
-
 If no DSN is found anywhere, the SDK enters **disabled mode**: every
-public call is a no-op, no thread starts, no socket opens.
+public call is a no-op.
 
 | Option | Default | Notes |
 |--------|---------|-------|
 | `dsn` | env `INSIDER_DSN` | If absent, SDK is disabled |
-| `environment` | `"production"` | Top-level Beacon field |
-| `release` | `None` | Top-level Beacon field |
-| `send_default_pii` | `False` | Required to capture `user.id`, request bodies |
-| `before_send` | `None` | `(beacon) -> beacon | None` hook |
-| `scrub_keys` | `None` | Extra keys to filter (added to the default deny-list) |
-| `in_app_include` | `None` | Filename prefixes considered "your code" |
-| `transport_queue_size` | `1000` | Bounded; drops on overflow |
-| `transport_flush_timeout` | `2.0` | Seconds. Used by `close()` / `flush()` |
-| `debug` | `False` | Print SDK's own warnings to stderr |
+| `environment` | `"production"` | Top-level Footprint field |
+| `release` | `None` | Top-level Footprint field |
+| `enable_logs` | `False` | Buffer stdlib logs into request envelopes |
+| `send_default_pii` | `False` | Required to capture request bodies |
+| `debug` | `False` | Print SDK warnings to stderr |
 
 ## Promise
 
-The SDK never raises into your code. Every public function catches
-`Exception` at its boundary; if something goes wrong inside the SDK,
-you get nothing back and a debug log (if enabled). Your app keeps
-running.
+The SDK never raises into your code.
 
 ## License
 

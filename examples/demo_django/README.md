@@ -30,9 +30,9 @@ python manage.py runserver 8001
 
 Then visit:
 
-- `http://localhost:8001/` — succeeds, no Beacon emitted.
+- `http://localhost:8001/` — succeeds, no Footprint emitted.
 - `http://localhost:8001/boom/` — raises `ValueError`, captured by the
-  middleware, sent as a Beacon to your Insider server.
+  middleware, sent as a Footprint to your Insider server.
 - `http://localhost:8001/notice/` — sends a manual `capture_message`.
 
 Look at the Insider dashboard (or the `/api/v1/beacons/` API) — the
