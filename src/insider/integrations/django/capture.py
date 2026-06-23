@@ -16,6 +16,19 @@ from ...stacktrace import exception_payload
 from .request import build_request_ctx
 
 _CAPTURED_ATTR = "_insider_exception_captured"
+_PENDING_BLOCK_ATTR = "_insider_pending_exception_block"
+
+
+def sync_pending_from_request(request: Any) -> None:
+    """Copy exception buffered on the request (async worker thread) onto scope."""
+    client = _client()
+    if client is None:
+        return
+    if client.scope.current_pending_exception() is not None:
+        return
+    block = getattr(request, _PENDING_BLOCK_ATTR, None)
+    if block is not None:
+        client.scope.set_pending_exception(block)
 
 
 @safe
@@ -42,4 +55,5 @@ def capture_request_exception(request: Any, exception: BaseException) -> None:
     block = exception_payload(
         exception, in_app_include=client.scope.static.in_app_include
     )
+    setattr(request, _PENDING_BLOCK_ATTR, block)
     client.scope.set_pending_exception(block)

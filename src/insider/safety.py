@@ -50,10 +50,36 @@ def safe(fn: F) -> F:
     the boundary functions catch them.
     """
 
+    if asyncio_iscoroutinefunction(fn):
+        return safe_async(fn)  # type: ignore[return-value]
+
     @functools.wraps(fn)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return fn(*args, **kwargs)
+        except Exception as exc:
+            debug(f"swallowed {type(exc).__name__} in {fn.__qualname__}: {exc}")
+            return None
+
+    return wrapper  # type: ignore[return-value]
+
+
+def asyncio_iscoroutinefunction(fn: Any) -> bool:
+    try:
+        import asyncio
+
+        return asyncio.iscoroutinefunction(fn)
+    except Exception:
+        return False
+
+
+def safe_async(fn: F) -> F:
+    """Like `@safe` for async functions — preserves the coroutine contract."""
+
+    @functools.wraps(fn)
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return await fn(*args, **kwargs)
         except Exception as exc:
             debug(f"swallowed {type(exc).__name__} in {fn.__qualname__}: {exc}")
             return None

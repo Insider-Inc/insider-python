@@ -42,13 +42,18 @@ Out-of-band events (background jobs, explicit calls) use standalone beacons:
 
 ### Django
 
-Initialize in `wsgi.py` (or `asgi.py`) before `get_wsgi_application()`:
+Initialize in `wsgi.py` or `asgi.py` **before** `get_wsgi_application()` /
+`get_asgi_application()`:
+
+#### WSGI (Gunicorn)
 
 ```python
 import os
 import insider
 from insider.integrations.django import DjangoIntegration
 from insider.integrations.logging import LoggingIntegration
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "myproject.settings")
 
 insider.init(
     dsn=os.environ.get("INSIDER_DSN"),
@@ -61,6 +66,65 @@ insider.init(
 from django.core.wsgi import get_wsgi_application
 application = get_wsgi_application()
 ```
+
+#### ASGI (Daphne / Uvicorn — plain Django)
+
+```python
+import os
+import insider
+from insider.integrations.django import DjangoIntegration
+from insider.integrations.logging import LoggingIntegration
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "myproject.settings")
+
+insider.init(
+    dsn=os.environ.get("INSIDER_DSN"),
+    environment="production",
+    release="1.2.3",
+    enable_logs=True,
+    integrations=[DjangoIntegration(), LoggingIntegration()],
+)
+
+from django.core.asgi import get_asgi_application
+application = get_asgi_application()
+```
+
+#### ASGI + Channels (`ProtocolTypeRouter`)
+
+Wrap only the HTTP branch; disable handler auto-perf to avoid double capture:
+
+```python
+import os
+import django
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "myproject.settings")
+
+import django
+
+django.setup()
+
+import insider
+from insider.integrations.django import DjangoIntegration
+from insider.integrations.django.asgi import wrap_asgi_application
+from insider.integrations.logging import LoggingIntegration
+
+insider.init(
+    dsn=os.environ.get("INSIDER_DSN"),
+    environment="production",
+    enable_logs=True,
+    integrations=[DjangoIntegration(auto_perf=False), LoggingIntegration()],
+)
+
+from channels.routing import ProtocolTypeRouter, URLRouter
+from django.core.asgi import get_asgi_application
+
+application = ProtocolTypeRouter({
+    "http": wrap_asgi_application(get_asgi_application()),
+    "websocket": URLRouter(websocket_urlpatterns),
+})
+```
+
+Set `INSIDER_DEBUG=true` to print which hooks installed at startup.
 
 That's the whole setup. **Every HTTP request** emits **one** `kind=request`
 beacon containing:

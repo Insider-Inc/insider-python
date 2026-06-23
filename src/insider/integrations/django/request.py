@@ -39,6 +39,47 @@ def attach_drf_request_backref(django_request: Any, drf_request: Any) -> None:
         debug(f"drf request backref failed: {exc}")
 
 
+def build_request_ctx_from_scope(
+    scope: Any,
+    send_default_pii: bool,
+) -> Dict[str, Any]:
+    """Build request context from a raw ASGI HTTP scope."""
+    try:
+        headers: Dict[str, str] = {}
+        for key, value in scope.get("headers") or []:
+            try:
+                name = key.decode("latin-1").lower().replace("_", "-")
+                val = value.decode("latin-1")
+            except Exception:
+                continue
+            if name not in _SAFE_HEADERS and len(val) > 4096:
+                continue
+            headers[name] = val
+
+        query_raw = scope.get("query_string") or b""
+        query = (
+            query_raw.decode("latin-1", errors="replace") if query_raw else None
+        )
+        path = scope.get("path")
+        method = scope.get("method")
+        client = scope.get("client")
+        ip = client[0] if client else None
+
+        ctx: Dict[str, Any] = {
+            "method": method,
+            "path": path,
+            "query_string": query,
+            "headers": headers,
+            "ip": ip,
+        }
+        if send_default_pii and ip:
+            ctx["ip_address"] = ip
+        return ctx
+    except Exception as exc:
+        debug(f"asgi scope ctx build failed: {exc}")
+        return {}
+
+
 def build_request_ctx(request: Any, send_default_pii: bool) -> Dict[str, Any]:
     try:
         request = _resolve_drf_request(request)

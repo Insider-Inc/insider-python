@@ -20,8 +20,8 @@ If Trusted Publishing is configured, no API token secrets are needed.
 
 ### 1) Prepare release commit
 
-1. Update version in `pyproject.toml`.
-2. Ensure changelog/release notes are updated.
+1. Update version in `pyproject.toml` and `src/insider/_version.py`.
+2. Update `CHANGELOG.md`.
 3. Run local checks:
 
 ```bash
@@ -54,11 +54,33 @@ python -c "import insider; print(insider.__version__)"
 1. Tag release:
 
 ```bash
-git tag -a sdk-python-v0.1.0 -m "Release insider-python v0.1.0"
-git push origin sdk-python-v0.1.0
+git tag -a sdk-python-v0.1.5 -m "Release insider-python v0.1.5"
+git push origin sdk-python-v0.1.5
 ```
 
 2. Tag push triggers `Publish SDK` workflow to production PyPI.
+
+### Manual publish (twine)
+
+Use when not relying on Trusted Publishing, or for a one-off upload from your
+machine:
+
+```bash
+cd project\ insider/sdk/python   # or your checkout of insider-python
+
+python -m pip install --upgrade pip build twine
+python -m build
+python -m twine check dist/*
+
+# TestPyPI (recommended first)
+python -m twine upload --repository testpypi dist/*
+
+# Production PyPI (API token or `twine upload` interactive)
+python -m twine upload dist/*
+```
+
+Configure credentials in `~/.pypirc` or pass `TWINE_USERNAME=__token__` and
+`TWINE_PASSWORD=<pypi-api-token>` for the upload step.
 
 ### 4) Post-release checks
 

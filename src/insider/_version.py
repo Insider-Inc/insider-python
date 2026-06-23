@@ -5,4 +5,4 @@ lookup on every beacon. Bump this and `[project].version` together when
 cutting a release.
 """
 
-__version__ = "0.3.0"
+__version__ = "0.1.5"

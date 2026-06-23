@@ -14,9 +14,10 @@ from ...safety import safe
 
 
 @safe
-def emit_request_envelope(
-    request: Any,
+def emit_http_footprint(
     *,
+    path: str,
+    method: Optional[str],
     duration_ms: float,
     status_code: Optional[int],
     trace_id: Optional[str],
@@ -26,13 +27,29 @@ def emit_request_envelope(
     if client is None:
         return
 
-    method = getattr(request, "method", None)
-    op = getattr(request, "path", None) or "unknown"
-
+    op = path or "unknown"
     client.capture_request(
         duration_ms=duration_ms,
         op=op,
         status_code=status_code,
         method=method,
+        trace_id=trace_id,
+    )
+
+
+@safe
+def emit_request_envelope(
+    request: Any,
+    *,
+    duration_ms: float,
+    status_code: Optional[int],
+    trace_id: Optional[str],
+) -> None:
+    """Build and ship a single `kind=request` beacon from a Django request."""
+    emit_http_footprint(
+        path=getattr(request, "path", None) or "unknown",
+        method=getattr(request, "method", None),
+        duration_ms=duration_ms,
+        status_code=status_code,
         trace_id=trace_id,
     )
