@@ -2,7 +2,10 @@
 
 All notable changes to `insider-python` are documented here.
 
-## 0.1.5 — 2026-06-19
+## 0.1.6 — 2026-06-19
+
+Same as the unreleased 0.1.5 line (PyPI version slot was consumed without
+a retained release). Use this version for Django ASGI support.
 
 ### Added
 

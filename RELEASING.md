@@ -54,8 +54,8 @@ python -c "import insider; print(insider.__version__)"
 1. Tag release:
 
 ```bash
-git tag -a sdk-python-v0.1.5 -m "Release insider-python v0.1.5"
-git push origin sdk-python-v0.1.5
+git tag -a sdk-python-v0.1.6 -m "Release insider-python v0.1.6"
+git push origin sdk-python-v0.1.6
 ```
 
 2. Tag push triggers `Publish SDK` workflow to production PyPI.
