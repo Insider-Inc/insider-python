@@ -2,6 +2,14 @@
 
 All notable changes to `insider-python` are documented here.
 
+## 0.1.7 — 2026-06-24
+
+### Added
+
+- Capture HTTP **response bodies** on Django WSGI/ASGI when `send_default_pii=True`
+  (truncated at 8 KiB; streaming responses skipped).
+- Correct `request_user` formatting when user context is a dict with `id`.
+
 ## 0.1.6 — 2026-06-19
 
 Same as the unreleased 0.1.5 line (PyPI version slot was consumed without

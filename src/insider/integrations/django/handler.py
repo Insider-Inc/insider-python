@@ -24,6 +24,7 @@ from ...client import _client
 from ...safety import debug, safe
 from .perf import emit_request_envelope
 from .capture import sync_pending_from_request
+from .request import read_response_body
 
 _patched = False
 _auto_perf = True
@@ -45,6 +46,12 @@ def _finalize_request_cycle(
         status_code = getattr(response, "status_code", None)
     sync_pending_from_request(request)
     if _auto_perf:
+        if client.send_default_pii and response is not None:
+            body = read_response_body(response)
+            if body is not None:
+                ctx = dict(client.scope.current_request() or {})
+                ctx["response_body"] = body
+                client.scope.set_request(ctx)
         emit_request_envelope(
             request,
             duration_ms=duration_ms,

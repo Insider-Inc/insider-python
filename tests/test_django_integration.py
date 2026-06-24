@@ -44,6 +44,17 @@ def test_integration_captures_view_exception(client, fake_transport):
 
 
 @pytest.mark.django_db
+def test_integration_captures_response_body_when_pii_enabled(
+    sdk_client, client, fake_transport
+):
+    sdk_client.send_default_pii = True
+    response = client.get("/ok/")
+    assert response.status_code == 200
+    assert len(fake_transport.envelopes) == 1
+    assert fake_transport.envelopes[0].get("response_body") == "ok"
+
+
+@pytest.mark.django_db
 def test_integration_clean_request_emits_one_footprint(client, fake_transport):
     response = client.get("/ok/")
     assert response.status_code == 200

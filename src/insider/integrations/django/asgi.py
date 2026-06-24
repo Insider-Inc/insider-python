@@ -95,11 +95,24 @@ class _InsiderAsgiHttpWrapper:
 
         start = time.perf_counter()
         status_code: Optional[int] = None
+        response_chunks: list[bytes] = []
+        response_bytes = 0
+        max_response_bytes = 8192
 
         async def send_wrapper(message: Dict[str, Any]) -> None:
-            nonlocal status_code
+            nonlocal status_code, response_bytes
             if message.get("type") == "http.response.start":
                 status_code = int(message.get("status", 500))
+            elif (
+                client.send_default_pii
+                and message.get("type") == "http.response.body"
+                and response_bytes < max_response_bytes
+            ):
+                chunk = message.get("body") or b""
+                if chunk:
+                    room = max_response_bytes - response_bytes
+                    response_chunks.append(chunk[:room])
+                    response_bytes += min(len(chunk), room)
             await send(message)
 
         try:
@@ -111,6 +124,13 @@ class _InsiderAsgiHttpWrapper:
             client.scope.set_pending_exception(block)
             raise
         finally:
+            if client.send_default_pii and response_chunks:
+                body = b"".join(response_chunks).decode("utf-8", errors="replace")
+                if response_bytes >= max_response_bytes:
+                    body += "...[truncated]"
+                ctx = dict(client.scope.current_request() or {})
+                ctx["response_body"] = body
+                client.scope.set_request(ctx)
             path = str(scope.get("path") or "/")
             method = str(scope.get("method") or "GET")
             emit_http_footprint(

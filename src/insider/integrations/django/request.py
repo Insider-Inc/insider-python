@@ -179,3 +179,44 @@ def _read_body(request: Any) -> Optional[str]:
         return str(raw)
     except Exception:
         return None
+
+
+_RESPONSE_BODY_MAX_BYTES = 8192
+
+
+def read_response_body(response: Any, *, max_bytes: int = _RESPONSE_BODY_MAX_BYTES) -> Optional[str]:
+    """Return response content as text when already materialized on the response."""
+    if response is None:
+        return None
+    try:
+        from django.http import StreamingHttpResponse
+
+        if isinstance(response, StreamingHttpResponse):
+            return None
+    except Exception:
+        pass
+    try:
+        content = getattr(response, "content", None)
+        if content is None:
+            return None
+        if not isinstance(content, (bytes, bytearray)):
+            return str(content)
+        raw = bytes(content)
+        if len(raw) > max_bytes:
+            raw = raw[:max_bytes]
+            suffix = "...[truncated]"
+        else:
+            suffix = ""
+        return raw.decode("utf-8", errors="replace") + suffix
+    except Exception:
+        return None
+
+
+def format_request_user(user_val: Any) -> str:
+    if not user_val:
+        return "anonymous"
+    if isinstance(user_val, dict):
+        uid = user_val.get("id")
+        if uid is not None:
+            return str(uid)
+    return str(user_val)

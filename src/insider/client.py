@@ -37,6 +37,16 @@ VALID_KINDS = {"error", "perf", "log", "custom", "request"}
 VALID_LEVELS = {"debug", "info", "warning", "error", "fatal"}
 
 
+def _format_request_user(user_val: Any) -> str:
+    if not user_val:
+        return "anonymous"
+    if isinstance(user_val, dict):
+        uid = user_val.get("id")
+        if uid is not None:
+            return str(uid)
+    return str(user_val)
+
+
 def _byte_len_footprint(obj: Dict[str, Any]) -> int:
     try:
         return len(json.dumps(obj, default=str, ensure_ascii=False).encode("utf-8"))
@@ -290,8 +300,9 @@ class Client:
             request_id=trace_id or self.scope.current_trace_id(),
             request_path=op.strip(),
             request_method=method,
-            request_user=str(request_ctx.get("user") or "anonymous"),
+            request_user=_format_request_user(request_ctx.get("user")),
             request_body=request_ctx.get("body"),
+            response_body=request_ctx.get("response_body"),
             response_time=float(duration_ms),
             status_code=code,
             system_logs=logs or None,
