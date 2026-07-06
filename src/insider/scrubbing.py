@@ -18,7 +18,7 @@ but the v1 contract is "we mask anything whose key looks scary."
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Optional, Set
+from typing import Any, Dict, Iterable, Optional, Set
 
 # Lowercase. Match is `key.lower() in DEFAULT_DENY_KEYS`.
 DEFAULT_DENY_KEYS: frozenset[str] = frozenset(
@@ -59,21 +59,46 @@ FILTERED = "[Filtered]"
 _MAX_DEPTH = 16
 
 
-def build_deny_set(extra_keys: Optional[Iterable[str]] = None) -> Set[str]:
-    """Combine the default deny-list with caller-supplied keys."""
-    deny = set(DEFAULT_DENY_KEYS)
+def build_deny_set(
+    extra_keys: Optional[Iterable[str]] = None,
+    *,
+    use_defaults: bool = True,
+) -> Set[str]:
+    """Build a deny-list; built-in keys are included only when `use_defaults=True`."""
+    deny: Set[str] = set()
+    if use_defaults:
+        deny.update(DEFAULT_DENY_KEYS)
     if extra_keys:
         deny.update(k.lower() for k in extra_keys if isinstance(k, str))
     return deny
 
 
-def scrub(data: Any, *, extra_keys: Optional[Iterable[str]] = None) -> Any:
+def scrub(
+    data: Any,
+    *,
+    extra_keys: Optional[Iterable[str]] = None,
+    use_defaults: bool = True,
+) -> Any:
     """
     Return a new structure with sensitive values replaced by `[Filtered]`.
     The input is not mutated.
     """
-    deny = build_deny_set(extra_keys)
+    deny = build_deny_set(extra_keys, use_defaults=use_defaults)
     return _scrub(data, deny, depth=0)
+
+
+def scrub_header_map(
+    headers: Dict[str, Any],
+    *,
+    extra_names: Optional[Iterable[str]] = None,
+    use_defaults: bool = True,
+) -> Dict[str, Any]:
+    """Redact header values whose names match the deny-list."""
+    deny = build_deny_set(extra_names, use_defaults=use_defaults)
+    return {
+        k: (FILTERED if isinstance(k, str) and k.lower() in deny else v)
+        for k, v in headers.items()
+    }
 
 
 def _scrub(value: Any, deny: Set[str], depth: int) -> Any:

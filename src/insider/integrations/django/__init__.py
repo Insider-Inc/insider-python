@@ -25,6 +25,7 @@ from typing import Any, Dict
 
 from ...safety import debug
 from . import asgi, drf, handler, signals, wsgi
+from ...client import _client
 
 
 class DjangoIntegration:
@@ -35,15 +36,18 @@ class DjangoIntegration:
     _lock = threading.Lock()
     _installed = False
 
-    def __init__(self, *, auto_perf: bool = True) -> None:
+    def __init__(self, *, auto_perf: bool = True, ignore_admin: bool = True) -> None:
         """
         Args:
             auto_perf: When True (default), emit one `kind=request` beacon
                 after every HTTP request via the `get_response` patch.
                 Set False when using `wrap_asgi_application()` on the HTTP
                 branch of a Channels router (avoids double capture).
+            ignore_admin: When True (default), skip footprints for `/admin/`
+                paths in addition to SDK `ignore_paths` defaults.
         """
         self.auto_perf = auto_perf
+        self.ignore_admin = ignore_admin
 
     def setup_once(self) -> None:
         cls = type(self)
@@ -69,6 +73,11 @@ class DjangoIntegration:
 
         with cls._lock:
             cls._installed = True
+
+        if self.ignore_admin:
+            client = _client()
+            if client is not None:
+                client.add_ignore_paths(["/admin/"])
 
         for label, install in (
             ("signals", signals.install),

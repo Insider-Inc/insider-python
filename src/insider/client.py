@@ -28,6 +28,8 @@ from ._version import __version__
 from .dsn import DSN, InvalidDSNError
 from .safety import debug, safe, set_debug
 from .scope import Scope, StaticScope
+from .paths import DEFAULT_IGNORE_PATHS, path_is_ignored
+from .privacy import normalize_header_policy, resolve_scrub_options
 from .scrubbing import scrub
 from .stacktrace import caller_source, exception_payload, runtime_payload
 from .transport import BackgroundTransport
@@ -35,6 +37,21 @@ from .transport import BackgroundTransport
 
 VALID_KINDS = {"error", "perf", "log", "custom", "request"}
 VALID_LEVELS = {"debug", "info", "warning", "error", "fatal"}
+
+_pii_warning_emitted = False
+
+
+def _warn_pii_without_scrub(send_default_pii: bool, scrub_defaults: bool, body_keys: List[str]) -> None:
+    global _pii_warning_emitted
+    if _pii_warning_emitted or not send_default_pii:
+        return
+    if scrub_defaults or body_keys:
+        return
+    _pii_warning_emitted = True
+    debug(
+        "send_default_pii=True without scrub_defaults or scrub_keys; "
+        "request/response bodies may include sensitive fields"
+    )
 
 
 def _format_request_user(user_val: Any) -> str:
@@ -52,6 +69,19 @@ def _byte_len_footprint(obj: Dict[str, Any]) -> int:
         return len(json.dumps(obj, default=str, ensure_ascii=False).encode("utf-8"))
     except Exception:
         return 10**9
+
+
+def _coerce_json_value(value: Any) -> Any:
+    """Parse JSON object/array strings so scrub can walk nested keys."""
+    if not isinstance(value, str) or not value:
+        return value
+    try:
+        parsed = json.loads(value)
+    except Exception:
+        return value
+    if isinstance(parsed, (dict, list)):
+        return parsed
+    return value
 
 IntegrationLike = Union[Any, type]
 
@@ -102,7 +132,11 @@ class Client:
         release: Optional[str] = None,
         send_default_pii: bool = False,
         before_send: Optional[Callable[[Dict[str, Any]], Optional[Dict[str, Any]]]] = None,
+        scrub_defaults: bool = False,
         scrub_keys: Optional[Iterable[str]] = None,
+        scrub: Optional[Dict[str, Any]] = None,
+        header_policy: str = "allowlist",
+        ignore_paths: Optional[Iterable[str]] = None,
         in_app_include: Optional[Iterable[str]] = None,
         transport_queue_size: int = 1000,
         transport_flush_timeout: float = 2.0,
@@ -115,7 +149,19 @@ class Client:
         self.enable_logs = bool(enable_logs)
         self.send_default_pii = bool(send_default_pii)
         self.before_send = before_send
-        self.scrub_keys: List[str] = list(scrub_keys or [])
+        use_defaults, body_keys, header_names = resolve_scrub_options(
+            scrub_defaults=scrub_defaults,
+            scrub_keys=scrub_keys,
+            scrub=scrub,
+        )
+        self.scrub_defaults = use_defaults
+        self.scrub_keys: List[str] = body_keys
+        self.header_scrub_names: List[str] = header_names
+        self.header_policy = normalize_header_policy(header_policy)
+        self._ignore_paths: List[str] = list(DEFAULT_IGNORE_PATHS)
+        if ignore_paths is not None:
+            self._ignore_paths.extend(str(p) for p in ignore_paths if p)
+        _warn_pii_without_scrub(self.send_default_pii, self.scrub_defaults, self.scrub_keys)
         self.scope = Scope(
             static=StaticScope(
                 environment=environment,
@@ -134,6 +180,24 @@ class Client:
         if not release and self.commit_hash:
             release = self.commit_hash
             self.scope.static.release = release
+
+    def add_ignore_paths(self, paths: Iterable[str]) -> None:
+        """Append path prefixes (used by framework integrations)."""
+        for path in paths:
+            if path and path not in self._ignore_paths:
+                self._ignore_paths.append(str(path))
+
+    def path_is_ignored(self, path: Optional[str]) -> bool:
+        if not path:
+            return False
+        return path_is_ignored(path, self._ignore_paths)
+
+    def _scrub_data(self, data: Any) -> Any:
+        return scrub(
+            data,
+            extra_keys=self.scrub_keys,
+            use_defaults=self.scrub_defaults,
+        )
 
     def _get_commit_hash(self) -> Optional[str]:
         try:
@@ -291,6 +355,10 @@ class Client:
             debug(f"capture_request invalid status_code: {status_code!r}")
             return None
 
+        op_stripped = op.strip()
+        if self.path_is_ignored(op_stripped):
+            return None
+
         exception_block = self.scope.current_pending_exception()
         request_ctx = self.scope.current_request() or {}
         logs = self.scope.current_request_logs()
@@ -298,11 +366,11 @@ class Client:
 
         footprint = build_footprint_payload(
             request_id=trace_id or self.scope.current_trace_id(),
-            request_path=op.strip(),
+            request_path=op_stripped,
             request_method=method,
             request_user=_format_request_user(request_ctx.get("user")),
-            request_body=request_ctx.get("body"),
-            response_body=request_ctx.get("response_body"),
+            request_body=_coerce_json_value(request_ctx.get("body")),
+            response_body=_coerce_json_value(request_ctx.get("response_body")),
             response_time=float(duration_ms),
             status_code=code,
             system_logs=logs or None,
@@ -404,7 +472,7 @@ class Client:
 
     def _dispatch_footprint(self, footprint: Dict[str, Any]) -> Optional[str]:
         """Scrub → before_send → size budget → transport submit."""
-        scrubbed = dict(footprint)
+        scrubbed = self._scrub_data(dict(footprint))
         scrubbed.pop("_tags", None)
         scrubbed.pop("_extra", None)
         if self.before_send is not None:
@@ -430,7 +498,7 @@ class Client:
 
     def _dispatch(self, envelope: Dict[str, Any]) -> Optional[str]:
         """Scrub → before_send → size budget → transport submit."""
-        envelope["payload"] = scrub(envelope.get("payload"), extra_keys=self.scrub_keys)
+        envelope["payload"] = self._scrub_data(envelope.get("payload"))
         if self.before_send is not None:
             try:
                 envelope = self.before_send(envelope)  # type: ignore[assignment]

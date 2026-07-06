@@ -85,3 +85,10 @@ def test_integration_disabled_mode_is_noop(client, fake_transport):
     response = client.get("/boom/")
     assert response.status_code == 500
     assert fake_transport.envelopes == []
+
+
+@pytest.mark.django_db
+def test_integration_skips_default_ignore_paths(client, fake_transport):
+    response = client.get("/static/app.js")
+    assert response.status_code == 404
+    assert fake_transport.envelopes == []

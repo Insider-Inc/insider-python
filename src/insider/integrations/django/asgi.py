@@ -20,6 +20,7 @@ from ...safety import debug, safe
 from ...stacktrace import exception_payload
 from .perf import emit_http_footprint
 from .request import build_request_ctx_from_scope
+from ._client_ctx import request_ctx_kwargs
 
 ASGIApp = Callable[..., Any]
 
@@ -87,10 +88,19 @@ class _InsiderAsgiHttpWrapper:
             await self.app(scope, receive, send)
             return
 
+        path = str(scope.get("path") or "/")
+        if client.path_is_ignored(path):
+            await self.app(scope, receive, send)
+            return
+
         trace_id = uuid.uuid4().hex
         client.scope.set_trace_id(trace_id)
         client.scope.set_request(
-            build_request_ctx_from_scope(scope, client.send_default_pii)
+            build_request_ctx_from_scope(
+                scope,
+                client.send_default_pii,
+                **request_ctx_kwargs(),
+            )
         )
 
         start = time.perf_counter()

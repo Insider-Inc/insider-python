@@ -14,6 +14,7 @@ from ...client import _client
 from ...safety import safe
 from ...stacktrace import exception_payload
 from .request import build_request_ctx
+from ._client_ctx import request_ctx_kwargs
 
 _CAPTURED_ATTR = "_insider_exception_captured"
 _PENDING_BLOCK_ATTR = "_insider_pending_exception_block"
@@ -49,7 +50,7 @@ def capture_request_exception(request: Any, exception: BaseException) -> None:
         return
 
     if client.scope.current_request() is None:
-        ctx = build_request_ctx(request, client.send_default_pii)
+        ctx = build_request_ctx(request, client.send_default_pii, **request_ctx_kwargs())
         client.scope.set_request(ctx)
 
     block = exception_payload(

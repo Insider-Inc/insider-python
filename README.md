@@ -199,7 +199,37 @@ public call is a no-op.
 | `release` | `None` | Top-level Footprint field |
 | `enable_logs` | `False` | Buffer stdlib logs into request envelopes |
 | `send_default_pii` | `False` | Required to capture request bodies |
+| `ignore_paths` | built-ins + custom | Skip footprints for path prefixes |
+| `scrub_defaults` | `False` | Opt in to built-in sensitive-key deny-list |
+| `scrub_keys` | `[]` | Extra key names to redact in bodies |
+| `header_policy` | `"allowlist"` | `"all"` or `"none"` for advanced use |
 | `debug` | `False` | Print SDK warnings to stderr |
+
+### Privacy
+
+Production apps typically add path ignores and keep bodies off:
+
+```python
+insider.init(
+    dsn=os.environ["INSIDER_DSN"],
+    ignore_paths=["/health", "/metrics"],
+    send_default_pii=False,
+)
+```
+
+When capturing bodies (`send_default_pii=True`), enable scrubbing:
+
+```python
+insider.init(
+    dsn=os.environ["INSIDER_DSN"],
+    send_default_pii=True,
+    scrub_defaults=True,
+    scrub_keys=["pin", "account_number"],
+)
+```
+
+See [security-compliance.md](../docs/security-compliance.md) for advanced
+options (`scrub={...}`, `header_policy`, `before_send`).
 
 ## Promise
 

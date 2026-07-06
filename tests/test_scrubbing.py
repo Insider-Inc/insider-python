@@ -32,6 +32,16 @@ def test_extra_keys_merge_with_defaults():
     assert out["password"] == FILTERED
 
 
+def test_extra_keys_only_when_defaults_disabled():
+    out = scrub(
+        {"x_secret": "v", "password": "p"},
+        extra_keys=["x_secret"],
+        use_defaults=False,
+    )
+    assert out["x_secret"] == FILTERED
+    assert out["password"] == "p"
+
+
 def test_does_not_mutate_input():
     original = {"password": "p", "headers": {"cookie": "c"}}
     snapshot = {"password": "p", "headers": {"cookie": "c"}}

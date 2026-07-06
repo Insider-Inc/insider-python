@@ -5,15 +5,14 @@ Build Insider request-context dicts from Django (and DRF) request objects.
 from __future__ import annotations
 
 import weakref
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from ...safety import debug
+from ...scrubbing import scrub_header_map
 
 # Request headers that are safe to forward to the dashboard. We keep an
 # allow-list rather than a deny-list because there are too many possible
-# custom headers to enumerate scary ones. Scrubbing further masks names
-# matching the default deny-list (Authorization, Cookie, etc.) at envelope
-# build time.
+# custom headers to enumerate scary ones.
 _SAFE_HEADERS = {
     "accept",
     "accept-encoding",
@@ -42,19 +41,19 @@ def attach_drf_request_backref(django_request: Any, drf_request: Any) -> None:
 def build_request_ctx_from_scope(
     scope: Any,
     send_default_pii: bool,
+    *,
+    header_policy: str = "allowlist",
+    header_scrub_names: Optional[List[str]] = None,
+    scrub_defaults: bool = False,
 ) -> Dict[str, Any]:
     """Build request context from a raw ASGI HTTP scope."""
     try:
-        headers: Dict[str, str] = {}
-        for key, value in scope.get("headers") or []:
-            try:
-                name = key.decode("latin-1").lower().replace("_", "-")
-                val = value.decode("latin-1")
-            except Exception:
-                continue
-            if name not in _SAFE_HEADERS and len(val) > 4096:
-                continue
-            headers[name] = val
+        headers = _extract_headers_from_scope(
+            scope,
+            header_policy=header_policy,
+            header_scrub_names=header_scrub_names,
+            scrub_defaults=scrub_defaults,
+        )
 
         query_raw = scope.get("query_string") or b""
         query = (
@@ -80,7 +79,14 @@ def build_request_ctx_from_scope(
         return {}
 
 
-def build_request_ctx(request: Any, send_default_pii: bool) -> Dict[str, Any]:
+def build_request_ctx(
+    request: Any,
+    send_default_pii: bool,
+    *,
+    header_policy: str = "allowlist",
+    header_scrub_names: Optional[List[str]] = None,
+    scrub_defaults: bool = False,
+) -> Dict[str, Any]:
     try:
         request = _resolve_drf_request(request)
 
@@ -96,7 +102,12 @@ def build_request_ctx(request: Any, send_default_pii: bool) -> Dict[str, Any]:
         except Exception:
             pass
 
-        headers = _extract_headers(meta)
+        headers = _extract_headers(
+            meta,
+            header_policy=header_policy,
+            header_scrub_names=header_scrub_names,
+            scrub_defaults=scrub_defaults,
+        )
 
         ctx: Dict[str, Any] = {
             "method": method,
@@ -132,8 +143,46 @@ def _resolve_drf_request(request: Any) -> Any:
     return request
 
 
-def _extract_headers(meta: Dict[str, Any]) -> Dict[str, str]:
-    """Convert Django's META dict into a real headers dict, allow-listed."""
+def _extract_headers_from_scope(
+    scope: Any,
+    *,
+    header_policy: str,
+    header_scrub_names: Optional[List[str]],
+    scrub_defaults: bool,
+) -> Dict[str, str]:
+    if header_policy == "none":
+        return {}
+    headers: Dict[str, str] = {}
+    for key, value in scope.get("headers") or []:
+        try:
+            name = key.decode("latin-1").lower().replace("_", "-")
+            val = value.decode("latin-1")
+        except Exception:
+            continue
+        if header_policy == "allowlist" and name not in _SAFE_HEADERS:
+            continue
+        if len(val) > 4096:
+            continue
+        headers[name] = val
+    if header_policy == "all":
+        return scrub_header_map(
+            headers,
+            extra_names=header_scrub_names,
+            use_defaults=scrub_defaults,
+        )
+    return headers
+
+
+def _extract_headers(
+    meta: Dict[str, Any],
+    *,
+    header_policy: str,
+    header_scrub_names: Optional[List[str]],
+    scrub_defaults: bool,
+) -> Dict[str, str]:
+    """Convert Django's META dict into a headers dict per `header_policy`."""
+    if header_policy == "none":
+        return {}
     headers: Dict[str, str] = {}
     for key, value in meta.items():
         if not key.startswith("HTTP_") and key not in (
@@ -145,13 +194,20 @@ def _extract_headers(meta: Dict[str, Any]) -> Dict[str, str]:
         if key.startswith("HTTP_"):
             name = key[len("HTTP_") :]
         name = name.replace("_", "-").lower()
-        if name not in _SAFE_HEADERS:
-            if len(str(value)) > 4096:
-                continue
+        if header_policy == "allowlist" and name not in _SAFE_HEADERS:
+            continue
+        if len(str(value)) > 4096:
+            continue
         try:
             headers[name] = str(value)
         except Exception:
             pass
+    if header_policy == "all":
+        return scrub_header_map(
+            headers,
+            extra_names=header_scrub_names,
+            use_defaults=scrub_defaults,
+        )
     return headers
 
 

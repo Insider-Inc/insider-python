@@ -58,6 +58,7 @@ def test_capture_exception_with_cause_chain(sdk_client, fake_transport):
 
 
 def test_scrubbing_runs_on_payload(sdk_client, fake_transport):
+    sdk_client.scrub_defaults = True
     insider.capture_message(
         "ping",
         extra={"password": "hunter2", "ok": "yes"},

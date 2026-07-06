@@ -24,7 +24,8 @@ from ...client import _client
 from ...safety import debug, safe
 from .perf import emit_request_envelope
 from .capture import sync_pending_from_request
-from .request import read_response_body
+from .request import build_request_ctx, read_response_body
+from ._client_ctx import request_ctx_kwargs
 
 _patched = False
 _auto_perf = True
@@ -83,11 +84,14 @@ def install(*, auto_perf: bool = True) -> None:
         if client is None:
             return old_get_response(self, request)
 
+        path = getattr(request, "path", "") or ""
+        if client.path_is_ignored(path):
+            return old_get_response(self, request)
+
         trace_id = uuid.uuid4().hex
         client.scope.set_trace_id(trace_id)
-        from .request import build_request_ctx
 
-        ctx = build_request_ctx(request, client.send_default_pii)
+        ctx = build_request_ctx(request, client.send_default_pii, **request_ctx_kwargs())
         client.scope.set_request(ctx)
 
         start = time.perf_counter()
@@ -112,11 +116,14 @@ def install(*, auto_perf: bool = True) -> None:
         if client is None:
             return await old_get_response_async(self, request)
 
+        path = getattr(request, "path", "") or ""
+        if client.path_is_ignored(path):
+            return await old_get_response_async(self, request)
+
         trace_id = uuid.uuid4().hex
         client.scope.set_trace_id(trace_id)
-        from .request import build_request_ctx
 
-        ctx = build_request_ctx(request, client.send_default_pii)
+        ctx = build_request_ctx(request, client.send_default_pii, **request_ctx_kwargs())
         client.scope.set_request(ctx)
 
         start = time.perf_counter()
