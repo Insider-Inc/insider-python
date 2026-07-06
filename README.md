@@ -200,6 +200,7 @@ public call is a no-op.
 | `enable_logs` | `False` | Buffer stdlib logs into request envelopes |
 | `send_default_pii` | `False` | Required to capture request bodies |
 | `ignore_paths` | built-ins + custom | Skip footprints for path prefixes |
+| `ignore_builtin_paths` | `True` | When `False`, do not apply `/static/`, `/media/`, `/favicon.ico` |
 | `scrub_defaults` | `False` | Opt in to built-in sensitive-key deny-list |
 | `scrub_keys` | `[]` | Extra key names to redact in bodies |
 | `header_policy` | `"allowlist"` | `"all"` or `"none"` for advanced use |
@@ -212,7 +213,7 @@ Production apps typically add path ignores and keep bodies off:
 ```python
 insider.init(
     dsn=os.environ["INSIDER_DSN"],
-    ignore_paths=["/health", "/metrics"],
+    ignore_paths=["/health/", "/metrics/"],
     send_default_pii=False,
 )
 ```
@@ -227,6 +228,13 @@ insider.init(
     scrub_keys=["pin", "account_number"],
 )
 ```
+
+Matched body keys are replaced with the literal string `"[Filtered]"`.
+
+With `enable_logs=True` (LoggingIntegration), stdlib log lines are attached
+as `system_logs`. Scrubbing applies to **dict keys** in structured log
+entries, not to free-form log message text — avoid logging secrets in
+`logger.info("password=%s", ...)` even when scrub is enabled.
 
 See [security-compliance.md](../docs/security-compliance.md) for advanced
 options (`scrub={...}`, `header_policy`, `before_send`).

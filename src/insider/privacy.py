@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from .safety import debug
+
 VALID_HEADER_POLICIES = frozenset({"allowlist", "all", "none"})
 
 
@@ -16,8 +18,9 @@ def resolve_scrub_options(
     """
     Return `(use_defaults, body_keys, header_names)`.
 
-    Top-level `scrub_defaults` / `scrub_keys` are sugar; overlapping fields
-    in `scrub` win when present.
+    Top-level `scrub_defaults` / `scrub_keys` are sugar. When `scrub` is
+    passed, overlapping fields in the dict win — e.g. ``scrub={"body_keys": [...]}``
+    replaces top-level ``scrub_keys`` entirely (it does not merge them).
     """
     use_defaults = bool(scrub_defaults)
     body_keys = list(scrub_keys or [])
@@ -39,5 +42,9 @@ def normalize_header_policy(value: Optional[str]) -> str:
         return "allowlist"
     policy = str(value).lower()
     if policy not in VALID_HEADER_POLICIES:
+        debug(
+            f"unknown header_policy={value!r}; falling back to 'allowlist'. "
+            f"Valid values: allowlist, all, none"
+        )
         return "allowlist"
     return policy

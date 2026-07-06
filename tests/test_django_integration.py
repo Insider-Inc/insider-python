@@ -92,3 +92,18 @@ def test_integration_skips_default_ignore_paths(client, fake_transport):
     response = client.get("/static/app.js")
     assert response.status_code == 404
     assert fake_transport.envelopes == []
+
+
+@pytest.mark.django_db
+def test_ignored_path_exception_does_not_leak_to_next_request(
+    sdk_client, client, fake_transport
+):
+    sdk_client.add_ignore_paths(["/health/"])
+    response = client.get("/health/boom/")
+    assert response.status_code == 500
+    assert fake_transport.envelopes == []
+
+    response = client.get("/ok/")
+    assert response.status_code == 200
+    assert len(fake_transport.envelopes) == 1
+    assert fake_transport.envelopes[0].get("exception_name") is None

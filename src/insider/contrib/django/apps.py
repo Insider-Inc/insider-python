@@ -49,6 +49,7 @@ def _settings_kwargs() -> Dict[str, Any]:
         ("INSIDER_SCRUB_KEYS", "scrub_keys"),
         ("INSIDER_HEADER_POLICY", "header_policy"),
         ("INSIDER_IGNORE_PATHS", "ignore_paths"),
+        ("INSIDER_IGNORE_BUILTIN_PATHS", "ignore_builtin_paths"),
         ("INSIDER_IN_APP_INCLUDE", "in_app_include"),
         ("INSIDER_TRANSPORT_QUEUE_SIZE", "transport_queue_size"),
         ("INSIDER_TRANSPORT_FLUSH_TIMEOUT", "transport_flush_timeout"),
@@ -57,16 +58,6 @@ def _settings_kwargs() -> Dict[str, Any]:
         value = getattr(settings, setting, None)
         if value is not None:
             kwargs[key] = value
-    return kwargs
-
-
-def _django_integration_kwargs() -> Dict[str, Any]:
-    from django.conf import settings
-
-    kwargs: Dict[str, Any] = {}
-    ignore_admin = getattr(settings, "INSIDER_IGNORE_ADMIN", None)
-    if ignore_admin is not None:
-        kwargs["ignore_admin"] = bool(ignore_admin)
     return kwargs
 
 
@@ -80,13 +71,8 @@ class InsiderConfig(AppConfig):
     def ready(self) -> None:
         try:
             kwargs = _settings_kwargs()
-            integration_kwargs = _django_integration_kwargs()
         except Exception as exc:
             debug(f"settings read failed: {exc}")
             return
         dsn = kwargs.pop("dsn", None)
-        init(
-            dsn,
-            integrations=[DjangoIntegration(**integration_kwargs)],
-            **kwargs,
-        )
+        init(dsn, integrations=[DjangoIntegration()], **kwargs)

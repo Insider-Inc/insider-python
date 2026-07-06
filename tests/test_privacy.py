@@ -81,3 +81,60 @@ def test_init_warns_when_pii_without_scrub(monkeypatch):
         transport=transport,  # type: ignore[arg-type]
     )
     assert any("send_default_pii=True" in w for w in warnings)
+
+
+def test_ignore_builtin_paths_disabled():
+    client = Client(
+        DSN.parse(VALID_DSN),
+        ignore_builtin_paths=False,
+        transport=FakeTransport(),  # type: ignore[arg-type]
+    )
+    assert not client.path_is_ignored("/static/app.js")
+    assert client.path_is_ignored("/static/app.js") is False
+
+
+def test_init_warns_on_invalid_header_policy(monkeypatch):
+    warnings: list[str] = []
+
+    def _capture(msg: str) -> None:
+        warnings.append(msg)
+
+    monkeypatch.setattr(insider.privacy, "debug", _capture)
+    Client(
+        DSN.parse(VALID_DSN),
+        header_policy="allow_list",
+        transport=FakeTransport(),  # type: ignore[arg-type]
+    )
+    assert any("unknown header_policy" in w for w in warnings)
+
+
+def test_init_warns_header_all_without_scrub(monkeypatch):
+    warnings: list[str] = []
+
+    def _capture(msg: str) -> None:
+        warnings.append(msg)
+
+    monkeypatch.setattr(insider.client, "debug", _capture)
+    insider.client._header_all_warning_emitted = False
+    Client(
+        DSN.parse(VALID_DSN),
+        header_policy="all",
+        transport=FakeTransport(),  # type: ignore[arg-type]
+    )
+    assert any("header_policy='all'" in w for w in warnings)
+
+
+def test_init_warns_logs_without_scrub(monkeypatch):
+    warnings: list[str] = []
+
+    def _capture(msg: str) -> None:
+        warnings.append(msg)
+
+    monkeypatch.setattr(insider.client, "debug", _capture)
+    insider.client._logs_warning_emitted = False
+    Client(
+        DSN.parse(VALID_DSN),
+        enable_logs=True,
+        transport=FakeTransport(),  # type: ignore[arg-type]
+    )
+    assert any("enable_logs=True" in w for w in warnings)

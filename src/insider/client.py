@@ -39,6 +39,8 @@ VALID_KINDS = {"error", "perf", "log", "custom", "request"}
 VALID_LEVELS = {"debug", "info", "warning", "error", "fatal"}
 
 _pii_warning_emitted = False
+_logs_warning_emitted = False
+_header_all_warning_emitted = False
 
 
 def _warn_pii_without_scrub(send_default_pii: bool, scrub_defaults: bool, body_keys: List[str]) -> None:
@@ -51,6 +53,37 @@ def _warn_pii_without_scrub(send_default_pii: bool, scrub_defaults: bool, body_k
     debug(
         "send_default_pii=True without scrub_defaults or scrub_keys; "
         "request/response bodies may include sensitive fields"
+    )
+
+
+def _warn_logs_without_scrub(enable_logs: bool, scrub_defaults: bool, body_keys: List[str]) -> None:
+    global _logs_warning_emitted
+    if _logs_warning_emitted or not enable_logs:
+        return
+    if scrub_defaults or body_keys:
+        return
+    _logs_warning_emitted = True
+    debug(
+        "enable_logs=True without scrub_defaults or scrub_keys; "
+        "system_logs capture free-form message text and are not redacted by key name"
+    )
+
+
+def _warn_header_all_without_scrub(
+    header_policy: str,
+    scrub_defaults: bool,
+    body_keys: List[str],
+    header_scrub_names: List[str],
+) -> None:
+    global _header_all_warning_emitted
+    if _header_all_warning_emitted or header_policy != "all":
+        return
+    if scrub_defaults or body_keys or header_scrub_names:
+        return
+    _header_all_warning_emitted = True
+    debug(
+        "header_policy='all' without scrub_defaults, scrub_keys, or scrub.header_names; "
+        "all request headers are sent without redaction"
     )
 
 
@@ -137,6 +170,7 @@ class Client:
         scrub: Optional[Dict[str, Any]] = None,
         header_policy: str = "allowlist",
         ignore_paths: Optional[Iterable[str]] = None,
+        ignore_builtin_paths: bool = True,
         in_app_include: Optional[Iterable[str]] = None,
         transport_queue_size: int = 1000,
         transport_flush_timeout: float = 2.0,
@@ -158,10 +192,19 @@ class Client:
         self.scrub_keys: List[str] = body_keys
         self.header_scrub_names: List[str] = header_names
         self.header_policy = normalize_header_policy(header_policy)
-        self._ignore_paths: List[str] = list(DEFAULT_IGNORE_PATHS)
+        self._ignore_paths: List[str] = []
+        if ignore_builtin_paths:
+            self._ignore_paths.extend(DEFAULT_IGNORE_PATHS)
         if ignore_paths is not None:
             self._ignore_paths.extend(str(p) for p in ignore_paths if p)
         _warn_pii_without_scrub(self.send_default_pii, self.scrub_defaults, self.scrub_keys)
+        _warn_logs_without_scrub(self.enable_logs, self.scrub_defaults, self.scrub_keys)
+        _warn_header_all_without_scrub(
+            self.header_policy,
+            self.scrub_defaults,
+            self.scrub_keys,
+            self.header_scrub_names,
+        )
         self.scope = Scope(
             static=StaticScope(
                 environment=environment,
@@ -182,7 +225,7 @@ class Client:
             self.scope.static.release = release
 
     def add_ignore_paths(self, paths: Iterable[str]) -> None:
-        """Append path prefixes (used by framework integrations)."""
+        """Append path prefixes (e.g. from app-specific integration hooks)."""
         for path in paths:
             if path and path not in self._ignore_paths:
                 self._ignore_paths.append(str(path))

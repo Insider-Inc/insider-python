@@ -9,8 +9,9 @@ walk the structure and mask any key name that looks dangerous.
 
 Match is case-insensitive on the *key name only*. We never inspect
 values for sensitive content (regex-on-everything is expensive and
-unreliable). If a customer wants extra keys filtered they pass
-`scrub_keys=[...]` into `init`, and the deny-list grows.
+unreliable). If a customer wants extra keys filtered they pass `scrub_keys=[...]` into
+`init`. Built-in deny-list keys apply only when `use_defaults=True`
+(see `scrub_defaults` on `Client.init`).
 
 A future phase can add value-level patterns (credit-card regex, etc.)
 but the v1 contract is "we mask anything whose key looks scary."

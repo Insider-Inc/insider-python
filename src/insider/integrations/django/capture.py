@@ -41,13 +41,17 @@ def capture_request_exception(request: Any, exception: BaseException) -> None:
     signal can both fire for the same failure; the request flag prevents
     double-buffering.
     """
-    if getattr(request, _CAPTURED_ATTR, False):
-        return
-    setattr(request, _CAPTURED_ATTR, True)
-
     client = _client()
     if client is None:
         return
+
+    path = getattr(request, "path", None) or ""
+    if client.path_is_ignored(path):
+        return
+
+    if getattr(request, _CAPTURED_ATTR, False):
+        return
+    setattr(request, _CAPTURED_ATTR, True)
 
     if client.scope.current_request() is None:
         ctx = build_request_ctx(request, client.send_default_pii, **request_ctx_kwargs())
