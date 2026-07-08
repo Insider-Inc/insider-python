@@ -119,15 +119,41 @@ def build_request_ctx(
 
         if send_default_pii:
             ctx["body"] = _read_body(request)
-            user = getattr(request, "user", None)
-            user_id = getattr(user, "id", None) if user is not None else None
-            if user_id is not None:
-                ctx["user"] = {"id": user_id}
+            user_payload = authenticated_user_payload(request)
+            if user_payload is not None:
+                ctx["user"] = user_payload
 
         return ctx
     except Exception as exc:
         debug(f"request ctx build failed: {exc}")
         return {}
+
+
+def authenticated_user_payload(request: Any) -> Optional[Dict[str, Any]]:
+    """Return ``{"id": ...}`` when the request has an authenticated user."""
+    try:
+        request = _resolve_drf_request(request)
+        user = getattr(request, "user", None)
+        if user is None or not getattr(user, "is_authenticated", False):
+            return None
+        user_id = getattr(user, "id", None)
+        if user_id is None:
+            return None
+        return {"id": user_id}
+    except Exception as exc:
+        debug(f"authenticated user read failed: {exc}")
+        return None
+
+
+def merge_authenticated_user(ctx: Dict[str, Any], request: Any) -> Dict[str, Any]:
+    """Re-read user after middleware/auth and merge into an existing ctx dict."""
+    out = dict(ctx)
+    user_payload = authenticated_user_payload(request)
+    if user_payload is not None:
+        out["user"] = user_payload
+    else:
+        out.pop("user", None)
+    return out
 
 
 def _resolve_drf_request(request: Any) -> Any:

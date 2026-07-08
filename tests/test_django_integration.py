@@ -44,6 +44,64 @@ def test_integration_captures_view_exception(client, fake_transport):
 
 
 @pytest.mark.django_db
+def test_integration_captures_authenticated_user_after_auth_middleware(
+    settings, sdk_client, client, fake_transport, django_user_model
+):
+    from tests import deferred_user_middleware as dum
+
+    settings.MIDDLEWARE = ["tests.deferred_user_middleware.DeferredUserMiddleware"]
+    sdk_client.send_default_pii = True
+    user = django_user_model.objects.create_user(username="alice", password="pass")
+    dum.deferred_user = user
+    try:
+        response = client.get("/ok/")
+        assert response.status_code == 200
+        assert len(fake_transport.envelopes) == 1
+        assert fake_transport.envelopes[0]["request_user"] == str(user.pk)
+    finally:
+        dum.deferred_user = None
+
+
+@pytest.mark.django_db
+def test_integration_anonymous_user_when_not_logged_in(
+    settings, sdk_client, client, fake_transport
+):
+    from tests import deferred_user_middleware as dum
+
+    settings.MIDDLEWARE = ["tests.deferred_user_middleware.DeferredUserMiddleware"]
+    sdk_client.send_default_pii = True
+    dum.deferred_user = None
+
+    response = client.get("/ok/")
+    assert response.status_code == 200
+    assert fake_transport.envelopes[0]["request_user"] == "anonymous"
+
+
+@pytest.mark.django_db
+def test_integration_refreshes_user_when_auto_perf_disabled(
+    settings, sdk_client, client, fake_transport, django_user_model
+):
+    from insider.integrations.django import handler as handler_module
+    from tests import deferred_user_middleware as dum
+
+    settings.MIDDLEWARE = ["tests.deferred_user_middleware.DeferredUserMiddleware"]
+    sdk_client.send_default_pii = True
+    user = django_user_model.objects.create_user(username="bob", password="pass")
+    dum.deferred_user = user
+    handler_module._auto_perf = False
+    try:
+        response = client.get("/ok/")
+        assert response.status_code == 200
+        assert fake_transport.envelopes == []
+        ctx = sdk_client.scope.current_request()
+        assert ctx is not None
+        assert ctx.get("user") == {"id": user.pk}
+    finally:
+        dum.deferred_user = None
+        handler_module._auto_perf = True
+
+
+@pytest.mark.django_db
 def test_integration_captures_response_body_when_pii_enabled(
     sdk_client, client, fake_transport
 ):

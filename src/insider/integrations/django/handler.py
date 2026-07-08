@@ -24,7 +24,7 @@ from ...client import _client
 from ...safety import debug, safe
 from .perf import emit_request_envelope
 from .capture import sync_pending_from_request
-from .request import build_request_ctx, read_response_body
+from .request import build_request_ctx, merge_authenticated_user, read_response_body
 from ._client_ctx import request_ctx_kwargs
 
 _patched = False
@@ -46,13 +46,17 @@ def _finalize_request_cycle(
     if status_code is None and response is not None:
         status_code = getattr(response, "status_code", None)
     sync_pending_from_request(request)
-    if _auto_perf:
-        if client.send_default_pii and response is not None:
+    if client.send_default_pii:
+        ctx = merge_authenticated_user(
+            dict(client.scope.current_request() or {}),
+            request,
+        )
+        if _auto_perf and response is not None:
             body = read_response_body(response)
             if body is not None:
-                ctx = dict(client.scope.current_request() or {})
                 ctx["response_body"] = body
-                client.scope.set_request(ctx)
+        client.scope.set_request(ctx)
+    if _auto_perf:
         emit_request_envelope(
             request,
             duration_ms=duration_ms,
