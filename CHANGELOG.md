@@ -2,6 +2,39 @@
 
 All notable changes to `insider-python` are documented here.
 
+## 0.1.9 — 2026-07-08
+
+### Added
+
+- SDK privacy controls: `ignore_paths`, `ignore_builtin_paths` (default
+  `True` for `/static/`, `/media/`, `/favicon.ico`), `scrub_defaults`,
+  `scrub_keys`, advanced `scrub={}` dict, and `header_policy`
+  (`allowlist` / `all` / `none`).
+- One-time init warnings when `send_default_pii=True`, `enable_logs=True`,
+  or `header_policy="all"` is used without scrub configuration.
+- `insider.contrib.django` reads `settings.INSIDER` and `INSIDER_*` keys for
+  v1 migration (`IGNORE_PATHS`, `MASK_FIELDS`, `CAPTURE_REQUEST_BODY`).
+
+### Changed
+
+- Built-in sensitive-key deny-list is **opt-in** (`scrub_defaults=False` by
+  default). Matched dict keys are replaced with the literal string
+  `"[Filtered]"`.
+- JSON request/response body strings are parsed before scrub walks nested
+  keys.
+- Invalid `header_policy` values fall back to `allowlist` with a debug
+  warning.
+
+### Removed
+
+- `DjangoIntegration(ignore_admin=...)` — use `ignore_paths` in `init()`
+  instead; not every app has `/admin/`.
+
+### Fixed
+
+- Exceptions on ignored paths no longer leak into the next request's
+  footprint (`capture_request_exception` skips ignored paths).
+
 ## 0.1.7 — 2026-06-24
 
 ### Added
