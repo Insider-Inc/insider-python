@@ -14,7 +14,7 @@ How to enable:
         "insider.contrib.django.middleware.InsiderMiddleware",
     ]
 
-    INSIDER_DSN = "https://<token>@insider.example.com/<project_uuid>"
+    INSIDER_DSN = "https://<token>@theinsiderinc.com/<project_uuid>"
     INSIDER_ENVIRONMENT = "production"
     INSIDER_RELEASE = "1.2.3"
 

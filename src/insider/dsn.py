@@ -9,7 +9,7 @@ beacons at and which credential to use:
 
 Example:
 
-    https://abc...xyz@insider.example.com/3c29b8cb-1fe9-4b42-94a0-28d016cb20f9
+    https://abc...xyz@theinsiderinc.com/3c29b8cb-1fe9-4b42-94a0-28d016cb20f9
 
 The endpoint path (`/api/v1/beam/<uuid>/`) is *not* in the DSN. We hard-
 code it on the SDK side so we can change the server's URL layout later

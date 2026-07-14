@@ -1,6 +1,6 @@
 # insider-python
 
-The Python SDK for [Insider](https://insider.moraks.cloud/).
+The Python SDK for [Insider](https://theinsiderinc.com/).
 
 Beam Beacons from your Python service to your Insider server with a
 one-line setup. No runtime overhead on your request path. Never raises
@@ -26,7 +26,7 @@ pip install "insider-python[django]"
 import insider
 
 insider.init(
-    dsn="https://<beacon_token>@insider.example.com/<project_uuid>",
+    dsn="https://<beacon_token>@theinsiderinc.com/<project_uuid>",
     environment="production",
     release="1.2.3",
 )
