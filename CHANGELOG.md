@@ -2,6 +2,26 @@
 
 All notable changes to `insider-python` are documented here.
 
+## 0.1.11 — 2026-08-06
+
+### Fixed
+
+- `LoggingIntegration` survives Django's `logging.config.dictConfig` (and
+  `fileConfig`) after `insider.init()` runs before `get_wsgi_application()`.
+  The SDK re-attaches its root handler automatically — integrators do not
+  need a post-setup hook.
+
+## 0.1.10 — 2026-07-08
+
+### Fixed
+
+- Django footprints no longer show `request_user: anonymous` on
+  authenticated requests when `send_default_pii=True`. The SDK re-reads
+  `request.user` in `_finalize_request_cycle` after auth middleware and DRF
+  JWT run, including when `auto_perf=False` (ASGI / Channels wrapper path).
+- User capture now requires `user.is_authenticated` (via shared
+  `authenticated_user_payload()`), with DRF request resolution preserved.
+
 ## 0.1.9 — 2026-07-08
 
 ### Added

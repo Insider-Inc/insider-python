@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import logging.config
 
 import pytest
 
@@ -11,8 +12,10 @@ from insider.integrations.logging import LoggingIntegration
 
 @pytest.fixture(autouse=True)
 def _install_logging_integration():
+    LoggingIntegration.reset_for_tests()
     LoggingIntegration().setup_once()
     yield
+    LoggingIntegration.reset_for_tests()
 
 
 def test_logging_embeds_in_request_footprint(sdk_client, fake_transport):
@@ -43,9 +46,6 @@ def test_logging_error_level_in_request(sdk_client, fake_transport):
 
 
 def test_enable_logs_false_skips_beacon_but_keeps_breadcrumb(sdk_client, fake_transport):
-    from insider.integrations.logging import LoggingIntegration
-
-    LoggingIntegration().setup_once()
     sdk_client.enable_logs = False
     log = logging.getLogger("tests.breadcrumb")
     log.setLevel(logging.WARNING)
@@ -95,3 +95,37 @@ def test_breadcrumb_ring_buffer_cap(sdk_client, fake_transport):
 
     assert len(sdk_client.scope.current_breadcrumbs()) == 50
     assert sdk_client.scope.current_breadcrumbs()[0]["message"] == "line 10"
+
+
+def test_handler_survives_dict_config_wipe(sdk_client, fake_transport):
+    """Django's LOGGING dictConfig must not orphan LoggingIntegration."""
+    sdk_client.enable_logs = True
+
+    root = logging.getLogger()
+    assert any(getattr(h, "_insider_handler", False) for h in root.handlers)
+
+    # Mimic Django: replace root handlers entirely.
+    logging.config.dictConfig(
+        {
+            "version": 1,
+            "disable_existing_loggers": False,
+            "handlers": {
+                "console": {
+                    "class": "logging.StreamHandler",
+                },
+            },
+            "root": {
+                "handlers": ["console"],
+                "level": "INFO",
+            },
+        }
+    )
+
+    assert any(getattr(h, "_insider_handler", False) for h in root.handlers)
+
+    sdk_client.scope.set_request({"path": "/ok/", "method": "GET"})
+    logging.getLogger("tests.after_dictconfig").info("still captured")
+    sdk_client.capture_request(duration_ms=1.0, op="/ok/", status_code=200)
+
+    logs = fake_transport.envelopes[0].get("system_logs") or []
+    assert any(line.get("message") == "still captured" for line in logs)

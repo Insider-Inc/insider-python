@@ -126,6 +126,10 @@ application = ProtocolTypeRouter({
 
 Set `INSIDER_DEBUG=true` to print which hooks installed at startup.
 
+`LoggingIntegration` stays attached when Django later applies
+`settings.LOGGING` via `dictConfig` — you do not re-init or re-attach
+handlers after `get_wsgi_application()`.
+
 That's the whole setup. **Every HTTP request** emits **one** `kind=request`
 beacon containing:
 
@@ -238,6 +242,9 @@ entries, not to free-form log message text — avoid logging secrets in
 
 See [security-compliance.md](../docs/security-compliance.md) for advanced
 options (`scrub={...}`, `header_policy`, `before_send`).
+
+Integrators deploying in Docker: see [sdk-integration-notes.md](../docs/sdk-integration-notes.md)
+for `release` / `GIT_SHA` setup.
 
 ## Promise
 
