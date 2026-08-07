@@ -2,6 +2,21 @@
 
 All notable changes to `insider-python` are documented here.
 
+## 0.1.12 — 2026-08-07
+
+### Fixed
+
+- Footprint `ip_address` now takes only the first hop from
+  `X-Forwarded-For` (and strips a trailing `:port` on IPv4). Behind GCLB /
+  nginx a comma-separated list was sent raw, Insider's
+  `GenericIPAddressField` rejected the beam with HTTP 400, and the SDK
+  dropped the footprint.
+- The `[django]` optional extra no longer depends on `django>=4.2`.
+  Installing `insider-python[django]` was upgrading host apps off their
+  pinned Django (e.g. 4.1.x on Python 3.8). Use `pip install insider-python`
+  — Django stays the app's dependency; `DjangoIntegration` imports it at
+  runtime.
+
 ## 0.1.11 — 2026-08-06
 
 ### Fixed

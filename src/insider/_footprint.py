@@ -8,6 +8,39 @@ from ._version import __version__
 from .stacktrace import runtime_payload
 
 
+def normalize_ip_address(value: Any) -> Optional[str]:
+    """
+    Coerce a client IP for Insider's ``GenericIPAddressField``.
+
+    Proxies (GCLB, nginx) often set ``X-Forwarded-For`` to a comma-separated
+    list (``client, proxy, …``). Sending that raw string makes beam ingest
+    return HTTP 400. Use the left-most (original client) hop only.
+    """
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple)):
+        value = value[0] if value else None
+        if value is None:
+            return None
+    text = str(value).strip()
+    if not text:
+        return None
+    first = ""
+    for hop in text.split(","):
+        candidate = hop.strip()
+        if candidate:
+            first = candidate
+            break
+    if not first:
+        return None
+    # Strip host:port for IPv4 (leave IPv6 alone — multiple colons).
+    if first.count(":") == 1:
+        host, _, port = first.partition(":")
+        if port.isdigit():
+            first = host.strip()
+    return first or None
+
+
 def build_footprint_payload(
     *,
     request_id: Optional[str],
@@ -51,7 +84,7 @@ def build_footprint_payload(
         "response_time": float(response_time),
         "status_code": status_code,
         "system_logs": system_logs,
-        "ip_address": ip_address,
+        "ip_address": normalize_ip_address(ip_address),
         "user_agent": user_agent,
         "db_query_count": db_query_count,
         "exception_name": exception_name,

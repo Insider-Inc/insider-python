@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "insider-python"
-version = "0.1.11"
+version = "0.1.12"
 description = "Python SDK for Insider — ship Beacons to your Insider server."
 readme = "README.md"
 requires-python = ">=3.8"
@@ -27,11 +27,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-django = ["django>=4.2"]
+# Marker only — do NOT pull Django. Host apps already pin their own
+# Django (e.g. 4.1.x); requiring django>=4.2 made pip upgrade/uninstall
+# the customer's framework. Install: pip install insider-python
+# (DjangoIntegration imports django at runtime if present.)
+django = []
 dev = [
     "pytest>=8",
     "pytest-django>=4.8",
-    "django>=4.2",
+    "django>=4.1",
     "djangorestframework>=3.14",
 ]
 

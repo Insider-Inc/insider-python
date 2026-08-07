@@ -210,4 +210,12 @@ class BackgroundTransport:
             self.sent_total += 1
         else:
             self.dropped_error += 1
-            debug(f"server returned {resp.status}; dropping beacon")
+            detail = ""
+            try:
+                detail = (resp.data or b"")[:500].decode("utf-8", errors="replace")
+            except Exception:
+                detail = "<unreadable body>"
+            debug(
+                f"server returned {resp.status}; dropping beacon"
+                + (f"; body={detail}" if detail else "")
+            )

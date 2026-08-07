@@ -12,12 +12,9 @@ into your code, no matter what.
 pip install insider-python
 ```
 
-For the Django integration:
-
-```bash
-pip install "insider-python[django]"
-```
-
+Your app already provides Django — do **not** rely on `insider-python[django]`
+to install the framework (older releases wrongly pulled `django>=4.2` and
+upgraded host pins). `DjangoIntegration` imports Django at runtime.
 ## Quick start
 
 ### Plain Python
