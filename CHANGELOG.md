@@ -2,6 +2,23 @@
 
 All notable changes to `insider-python` are documented here.
 
+## 0.2.0 — 2026-10-27
+
+### Added
+
+- `FastAPIIntegration`: pass it to `insider.init` the same way as
+  `DjangoIntegration`. One flat footprint per HTTP request, including
+  timing, request context, stdlib logs when `enable_logs=True`, and any
+  unhandled exception. WebSocket and lifespan traffic is ignored.
+  `pip install insider-python` is enough; the host app keeps its own
+  FastAPI pin.
+
+### Changed
+
+- Per-request scope now uses `contextvars`, so concurrent async requests
+  on one event loop do not share footprints. Django's one-request-per-thread
+  behavior is unchanged.
+
 ## 0.1.12 — 2026-08-07
 
 ### Fixed

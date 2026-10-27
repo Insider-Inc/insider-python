@@ -385,6 +385,8 @@ class Client:
         trace_id: Optional[str] = None,
         tags: Optional[Dict[str, Any]] = None,
         extra: Optional[Dict[str, Any]] = None,
+        framework: Optional[str] = None,
+        language: Optional[str] = None,
     ) -> Optional[str]:
         """Emit one HTTP request footprint to the beam endpoint."""
         if not isinstance(duration_ms, (int, float)) or duration_ms < 0:
@@ -424,6 +426,10 @@ class Client:
             release=self.scope.static.release,
             commit_hash=self.commit_hash,
         )
+        if framework:
+            footprint["framework"] = framework
+        if language:
+            footprint["language"] = language
         if tags:
             footprint["_tags"] = tags
         if extra:

@@ -121,6 +121,44 @@ application = ProtocolTypeRouter({
 })
 ```
 
+### FastAPI
+
+Same idea: pass `FastAPIIntegration()` to `init` before the process starts
+serving. No middleware.
+
+```python
+import os
+import insider
+from insider.integrations.fastapi import FastAPIIntegration
+from insider.integrations.logging import LoggingIntegration
+
+insider.init(
+    dsn=os.environ.get("INSIDER_DSN"),
+    environment="production",
+    release="1.2.3",
+    enable_logs=True,
+    integrations=[FastAPIIntegration(), LoggingIntegration()],
+)
+
+from fastapi import FastAPI
+
+app = FastAPI()
+```
+
+Every HTTP request emits **one** flat footprint (timing, request context,
+stdlib logs when `enable_logs=True`, and the unhandled exception when the
+request fails). WebSocket and lifespan traffic is ignored.
+
+Turn auto-capture off until you want it:
+
+```python
+integrations=[FastAPIIntegration(auto_perf=False)]
+```
+
+`pip install insider-python` is enough. Do **not** rely on an extra to
+install FastAPI — the host app already pins it. `FastAPIIntegration`
+imports FastAPI at runtime.
+
 Set `INSIDER_DEBUG=true` to print which hooks installed at startup.
 
 `LoggingIntegration` stays attached when Django later applies
@@ -157,6 +195,20 @@ logger.info("checkout completed")  # → payload.logs[] on the request beacon
 
 Requires `enable_logs=True`, `LoggingIntegration()`, and a configured
 logger level (see your app's `LOGGING` settings).
+
+`LoggingIntegration` accepts two optional thresholds:
+
+```python
+from insider.integrations.logging import LoggingIntegration
+
+LoggingIntegration(
+    logs_level=logging.INFO,        # minimum level beamed as standalone log beacon
+    breadcrumb_level=logging.DEBUG, # minimum level recorded as a breadcrumb
+)
+```
+
+`breadcrumb_level` defaults to `DEBUG`; `logs_level` defaults to `INFO`.
+Breadcrumbs are attached to `capture_exception` payloads automatically.
 
 Outside an HTTP request, stdlib logs still beam as standalone `kind=log`
 beacons. For explicit structured events, use `capture_log()`:
@@ -199,12 +251,17 @@ public call is a no-op.
 | `environment` | `"production"` | Top-level Footprint field |
 | `release` | `None` | Top-level Footprint field |
 | `enable_logs` | `False` | Buffer stdlib logs into request envelopes |
-| `send_default_pii` | `False` | Required to capture request bodies |
-| `ignore_paths` | built-ins + custom | Skip footprints for path prefixes |
-| `ignore_builtin_paths` | `True` | When `False`, do not apply `/static/`, `/media/`, `/favicon.ico` |
+| `send_default_pii` | `False` | Required to capture request/response bodies |
+| `ignore_paths` | `[]` | Skip footprints for these path prefixes |
+| `ignore_builtin_paths` | `True` | When `False`, capture `/static/`, `/media/`, `/favicon.ico` |
 | `scrub_defaults` | `False` | Opt in to built-in sensitive-key deny-list |
 | `scrub_keys` | `[]` | Extra key names to redact in bodies |
-| `header_policy` | `"allowlist"` | `"all"` or `"none"` for advanced use |
+| `scrub` | `None` | Advanced dict — see Privacy section below |
+| `header_policy` | `"allowlist"` | `"all"` captures all; `"none"` captures no headers |
+| `in_app_include` | `[]` | Module prefixes marked `in_app=True` in stack frames |
+| `before_send` | `None` | Callable `(payload) -> payload \| None`; return `None` to drop |
+| `transport_queue_size` | `1000` | Drop beacons when queue is full |
+| `transport_flush_timeout` | `2.0` | Seconds; used by `flush()` |
 | `debug` | `False` | Print SDK warnings to stderr |
 
 ### Privacy
@@ -227,6 +284,21 @@ insider.init(
     send_default_pii=True,
     scrub_defaults=True,
     scrub_keys=["pin", "account_number"],
+)
+```
+
+For full control over what gets scrubbed, use the `scrub` dict — it overrides
+all shorthand scrub params:
+
+```python
+insider.init(
+    dsn=os.environ["INSIDER_DSN"],
+    send_default_pii=True,
+    scrub={
+        "defaults": True,               # enable built-in deny-list
+        "body_keys": ["pin", "dob"],     # additional body key redactions
+        "header_names": ["x-internal"],  # additional header redactions
+    },
 )
 ```
 

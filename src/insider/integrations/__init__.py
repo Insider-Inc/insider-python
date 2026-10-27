@@ -5,6 +5,7 @@ Each integration exposes a `setup_once()` hook that patches into the host
 framework exactly once per process. Pass instances to `insider.init`:
 
     insider.init(dsn=..., integrations=[DjangoIntegration()])
+    insider.init(dsn=..., integrations=[FastAPIIntegration()])
 """
 
 from __future__ import annotations

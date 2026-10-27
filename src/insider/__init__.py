@@ -14,9 +14,10 @@ Public API:
     insider.LoggingIntegration
     insider.__version__
 
-Django integration (import from subpackage):
+Framework integrations (import from the subpackage):
 
     from insider.integrations.django import DjangoIntegration, wrap_asgi_application
+    from insider.integrations.fastapi import FastAPIIntegration
 
 Nothing else is part of the public contract. Anything imported below
 `_` is internal and may change without notice.

@@ -1,21 +1,21 @@
 """
-Global + per-thread scope.
+Global + per-task scope.
 
 The scope holds the context that every Footprint should be enriched with:
 
   - Static, set once at `init()`: environment, release, in_app_include.
-  - Dynamic, per-thread: the current HTTP request (when running inside a
+  - Dynamic, per task: the current HTTP request (when running inside a
     framework integration), other transient enrichments.
 
-We use a threading.local for the dynamic part because Django still runs
-one request per thread under wsgi. When we add asgi / asyncio support in
-a later phase we'll swap this for `contextvars.ContextVar` — the public
-API doesn't change.
+Dynamic state lives in a `contextvars.ContextVar`. Each OS thread has its
+own context, which matches Django's one-request-per-thread WSGI model.
+Async servers copy that context into each request task, so concurrent
+FastAPI/ASGI requests on one event loop do not share footprints.
 """
 
 from __future__ import annotations
 
-import threading
+import contextvars
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Deque, Dict, List, Optional
@@ -65,51 +65,65 @@ class StaticScope:
     in_app_include: Optional[List[str]] = None
 
 
-class _ThreadLocal(threading.local):
-    """Per-thread state. Each thread gets its own `request` and `trace_id` slots."""
+class _Dynamic:
+    """Mutable per-task request state. Not shared across contexts."""
 
-    request: Optional[Dict[str, Any]] = None
-    trace_id: Optional[str] = None
-    pending_exception: Optional[Dict[str, Any]] = None
-    breadcrumbs: Deque[Breadcrumb]
-    request_logs: Deque[RequestLogLine]
+    __slots__ = (
+        "request",
+        "trace_id",
+        "pending_exception",
+        "breadcrumbs",
+        "request_logs",
+    )
+
+    def __init__(self) -> None:
+        self.request: Optional[Dict[str, Any]] = None
+        self.trace_id: Optional[str] = None
+        self.pending_exception: Optional[Dict[str, Any]] = None
+        self.breadcrumbs: Deque[Breadcrumb] = deque(maxlen=BREADCRUMB_MAX)
+        self.request_logs: Deque[RequestLogLine] = deque(maxlen=REQUEST_LOG_MAX)
 
 
 @dataclass
 class Scope:
     static: StaticScope = field(default_factory=StaticScope)
-    _local: _ThreadLocal = field(default_factory=_ThreadLocal)
+    _dynamic: contextvars.ContextVar = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
-        if not hasattr(self._local, "breadcrumbs") or self._local.breadcrumbs is None:
-            self._local.breadcrumbs = deque(maxlen=BREADCRUMB_MAX)
-        if not hasattr(self._local, "request_logs") or self._local.request_logs is None:
-            self._local.request_logs = deque(maxlen=REQUEST_LOG_MAX)
+        self._dynamic = contextvars.ContextVar(f"insider_scope_{id(self)}")
+
+    def _state(self) -> _Dynamic:
+        try:
+            return self._dynamic.get()
+        except LookupError:
+            state = _Dynamic()
+            self._dynamic.set(state)
+            return state
 
     # -- request context ---------------------------------------------------
 
     def set_request(self, request: Dict[str, Any]) -> None:
-        """Attach a request-context dict to the current thread."""
-        self._local.request = request
+        """Attach a request-context dict to the current task."""
+        self._state().request = request
 
     def clear_request(self) -> None:
-        """Drop the current thread's request context."""
-        self._local.request = None
+        """Drop the current task's request context."""
+        self._state().request = None
 
     def current_request(self) -> Optional[Dict[str, Any]]:
-        return getattr(self._local, "request", None)
+        return self._state().request
 
     # -- trace id (links perf + error beacons on one HTTP request) ---------
 
     def set_trace_id(self, trace_id: str) -> None:
-        """Attach a trace id for the current thread (set by DjangoIntegration)."""
-        self._local.trace_id = trace_id
+        """Attach a trace id for the current task (set by framework integrations)."""
+        self._state().trace_id = trace_id
 
     def clear_trace_id(self) -> None:
-        self._local.trace_id = None
+        self._state().trace_id = None
 
     def current_trace_id(self) -> Optional[str]:
-        return getattr(self._local, "trace_id", None)
+        return self._state().trace_id
 
     # -- breadcrumbs (log context on errors) -------------------------------
 
@@ -121,9 +135,7 @@ class Scope:
         category: str,
         timestamp: str,
     ) -> None:
-        if not hasattr(self._local, "breadcrumbs") or self._local.breadcrumbs is None:
-            self._local.breadcrumbs = deque(maxlen=BREADCRUMB_MAX)
-        self._local.breadcrumbs.append(
+        self._state().breadcrumbs.append(
             Breadcrumb(
                 level=level,
                 message=message,
@@ -133,26 +145,21 @@ class Scope:
         )
 
     def current_breadcrumbs(self) -> List[Dict[str, Any]]:
-        crumbs = getattr(self._local, "breadcrumbs", None)
-        if not crumbs:
-            return []
-        return [c.to_dict() for c in crumbs]
+        return [crumb.to_dict() for crumb in self._state().breadcrumbs]
 
     def clear_breadcrumbs(self) -> None:
-        logs = getattr(self._local, "breadcrumbs", None)
-        if logs is not None:
-            logs.clear()
+        self._state().breadcrumbs.clear()
 
     # -- pending exception (buffered until request envelope emit) ----------
 
     def set_pending_exception(self, exception_block: Dict[str, Any]) -> None:
-        self._local.pending_exception = exception_block
+        self._state().pending_exception = exception_block
 
     def current_pending_exception(self) -> Optional[Dict[str, Any]]:
-        return getattr(self._local, "pending_exception", None)
+        return self._state().pending_exception
 
     def clear_pending_exception(self) -> None:
-        self._local.pending_exception = None
+        self._state().pending_exception = None
 
     # -- request-scoped logs (flushed into request envelope) -----------------
 
@@ -164,9 +171,7 @@ class Scope:
         source: str,
         timestamp: str,
     ) -> None:
-        if not hasattr(self._local, "request_logs") or self._local.request_logs is None:
-            self._local.request_logs = deque(maxlen=REQUEST_LOG_MAX)
-        self._local.request_logs.append(
+        self._state().request_logs.append(
             RequestLogLine(
                 level=level,
                 message=message,
@@ -176,18 +181,13 @@ class Scope:
         )
 
     def current_request_logs(self) -> List[Dict[str, Any]]:
-        lines = getattr(self._local, "request_logs", None)
-        if not lines:
-            return []
-        return [line.to_dict() for line in lines]
+        return [line.to_dict() for line in self._state().request_logs]
 
     def clear_request_logs(self) -> None:
-        lines = getattr(self._local, "request_logs", None)
-        if lines is not None:
-            lines.clear()
+        self._state().request_logs.clear()
 
     def clear_request_cycle(self) -> None:
-        """Drop all per-request thread state after a request envelope is emitted."""
+        """Drop all per-request task state after a request footprint is emitted."""
         self.clear_request()
         self.clear_trace_id()
         self.clear_pending_exception()

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "insider-python"
-version = "0.1.12"
+version = "0.2.0"
 description = "Python SDK for Insider — ship Beacons to your Insider server."
 readme = "README.md"
 requires-python = ">=3.8"
@@ -32,11 +32,16 @@ dependencies = [
 # the customer's framework. Install: pip install insider-python
 # (DjangoIntegration imports django at runtime if present.)
 django = []
+# Marker only — do NOT pull FastAPI. Host apps pin their own framework.
+# FastAPIIntegration imports fastapi at runtime if present.
+fastapi = []
 dev = [
     "pytest>=8",
     "pytest-django>=4.8",
     "django>=4.1",
     "djangorestframework>=3.14",
+    "fastapi>=0.115",
+    "httpx>=0.27",
 ]
 
 [project.urls]
